@@ -18,7 +18,7 @@ class ProcessFundsGatewayException implements ProcessGatewayException
      */
     public function process(
         $e,
-        User $user
+        Customer $customer
     ) {
         if (!$e instanceof Gateway\FundsException) {
             return;

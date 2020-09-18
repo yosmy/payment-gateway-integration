@@ -19,7 +19,7 @@ class ProcessCvcGatewayException implements Payment\ProcessGatewayException
      */
     public function process(
         $e,
-        Payment\User $user
+        Payment\Customer $customer
     ) {
         if (!$e instanceof Gateway\FieldException) {
             return;

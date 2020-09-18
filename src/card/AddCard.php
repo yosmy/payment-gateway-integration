@@ -3,7 +3,6 @@
 namespace Yosmy\Payment;
 
 use Yosmy;
-use Yosmy\Payment\Card\CalculateFingerprint;
 
 /**
  * @di\service()
@@ -11,91 +10,99 @@ use Yosmy\Payment\Card\CalculateFingerprint;
 class AddCard
 {
     /**
-     * @var AnalyzeAddCardIn[]
+     * @var GatherCustomer
      */
-    private $analyzeAddCardIn;
+    private $gatherCustomer;
 
     /**
-     * @var AnalyzeAddCardSuccessedOut[]
+     * @var ResolveCard
      */
-    private $analyzeAddCardSuccessedOut;
+    private $resolveCard;
 
     /**
-     * @var AnalyzeAddCardFailedOut[]
+     * @var Card\CreateGid
      */
-    private $analyzeAddCardFailedOut;
+    private $createGid;
 
     /**
-     * @var Card\CalculateFingerprint
+     * @var Card\AddGid
      */
-    private $calculateFingerprint;
+    private $addGid;
 
     /**
-     * @var ManageCardCollection
+     * @var AnalyzePreAddCard[]
      */
-    private $manageCollection;
+    private $analyzePreAddCardServices;
 
     /**
-     * @var SetupCard
+     * @var AnalyzePostAddCardSuccess[]
      */
-    private $setupCard;
+    private $analyzePostAddCardSuccessServices;
+
+    /**
+     * @var AnalyzePostAddCardFail[]
+     */
+    private $analyzePostAddCardFailServices;
 
     /**
      * @di\arguments({
-     *     analyzeAddCardIn:           '#yosmy.payment.add_card.in',
-     *     analyzeAddCardSuccessedOut: '#yosmy.payment.add_card.successed_out',
-     *     analyzeAddCardFailedOut:    '#yosmy.payment.add_card.failed_out'
+     *     analyzePreAddCardServices:         '#yosmy.payment.pre_add_card',
+     *     analyzePostAddCardSuccessServices: '#yosmy.payment.post_add_card_success',
+     *     analyzePostAddCardFailServices:    '#yosmy.payment.post_add_card_fail'
      * })
      *
-     * @param AnalyzeAddCardIn[]           $analyzeAddCardIn
-     * @param AnalyzeAddCardSuccessedOut[] $analyzeAddCardSuccessedOut
-     * @param AnalyzeAddCardFailedOut[]    $analyzeAddCardFailedOut
-     * @param CalculateFingerprint         $calculateFingerprint
-     * @param ManageCardCollection         $manageCollection
-     * @param SetupCard                    $setupCard
+     * @param GatherCustomer              $gatherCustomer
+     * @param ResolveCard                 $resolveCard
+     * @param Card\CreateGid              $createGid
+     * @param Card\AddGid                 $addGid
+     * @param AnalyzePreAddCard[]         $analyzePreAddCardServices
+     * @param AnalyzePostAddCardSuccess[] $analyzePostAddCardSuccessServices
+     * @param AnalyzePostAddCardFail[]    $analyzePostAddCardFailServices
      */
     public function __construct(
-        ?array $analyzeAddCardIn,
-        ?array $analyzeAddCardSuccessedOut,
-        ?array $analyzeAddCardFailedOut,
-        CalculateFingerprint $calculateFingerprint,
-        ManageCardCollection $manageCollection,
-        SetupCard $setupCard
+        GatherCustomer $gatherCustomer,
+        ResolveCard $resolveCard,
+        Card\CreateGid $createGid,
+        Card\AddGid $addGid,
+        ?array $analyzePreAddCardServices,
+        ?array $analyzePostAddCardSuccessServices,
+        ?array $analyzePostAddCardFailServices
     ) {
-        $this->analyzeAddCardIn = $analyzeAddCardIn;
-        $this->analyzeAddCardSuccessedOut = $analyzeAddCardSuccessedOut;
-        $this->analyzeAddCardFailedOut = $analyzeAddCardFailedOut;
-        $this->calculateFingerprint = $calculateFingerprint;
-        $this->manageCollection = $manageCollection;
-        $this->setupCard = $setupCard;
+        $this->gatherCustomer = $gatherCustomer;
+        $this->resolveCard = $resolveCard;
+        $this->createGid = $createGid;
+        $this->addGid = $addGid;
+        $this->analyzePreAddCardServices = $analyzePreAddCardServices;
+        $this->analyzePostAddCardSuccessServices = $analyzePostAddCardSuccessServices;
+        $this->analyzePostAddCardFailServices = $analyzePostAddCardFailServices;
     }
 
     /**
-     * @param User   $user
-     * @param string $number
-     * @param string $name
-     * @param string $month
-     * @param string $year
-     * @param string $cvc
-     * @param string $zip
+     * @param Customer $customer
+     * @param string       $number
+     * @param string       $name
+     * @param string       $month
+     * @param string       $year
+     * @param string       $cvc
+     * @param string       $zip
      *
      * @return Card
      *
      * @throws Exception
      */
     public function add(
-        User $user,
+        Customer $customer,
         string $number,
         string $name,
         string $month,
         string $year,
         string $cvc,
         string $zip
-    ) {
-        foreach ($this->analyzeAddCardIn as $analyzeAddCardIn) {
+    ): Card {
+        foreach ($this->analyzePreAddCardServices as $analyzePreAddCard) {
             try {
-                $analyzeAddCardIn->analyze(
-                    $user,
+                $analyzePreAddCard->analyze(
+                    $customer,
                     $number,
                     $name,
                     $month,
@@ -104,91 +111,9 @@ class AddCard
                     $zip
                 );
             } catch (Exception $e) {
-                throw $e;
-            }
-        }
-
-        $fingerprint = $this->calculateFingerprint->calculate($number);
-
-        /** @var Card $card */
-        $card = $this->manageCollection->findOne([
-            'user' => $user,
-            'fingerprint' => $fingerprint,
-        ]);
-
-        $raw = [
-            'number' => $number,
-            'name' => $name,
-            'month' => $month,
-            'year' => $year,
-            'cvc' => $cvc,
-            'zip' => $zip
-        ];
-
-        if (!$card) {
-            $card = uniqid();
-
-            // Create the card, but with no gids
-            $this->manageCollection->insertOne([
-                '_id' => $card,
-                'user' => $user->getId(),
-                'last4' => substr($number, -4),
-                'fingerprint' => $fingerprint,
-                'gids' => [],
-                'raw' => $raw
-            ]);
-
-            /** @var Card $card */
-            $card = $this->manageCollection->findOne([
-                '_id' => $card
-            ]);
-
-            $new = true;
-        } else {
-            if (!$card->isDeleted()) {
-                throw new KnownException('Esta tarjeta ya la tienes añadida.');
-            }
-
-            $this->manageCollection->updateOne(
-                [
-                    '_id' => $card->getId(),
-                ],
-                [
-                    '$set' => [
-                        'raw' => $raw
-                    ]
-                ]
-            );
-
-            $new = false;
-        }
-
-        try {
-            $this->setupCard->setup(
-                $card
-            );
-        } catch (Exception $e) {
-            if ($new) {
-                $this->manageCollection->deleteOne([
-                    '_id' => $card->getId(),
-                ]);
-            } else {
-                $this->manageCollection->updateOne(
-                    [
-                        '_id' => $card->getId(),
-                    ],
-                    [
-                        '$set' => [
-                            'raw' => []
-                        ]
-                    ]
-                );
-            }
-
-            foreach ($this->analyzeAddCardFailedOut as $analyzeAddCardFailedOut) {
-                try {
-                    $analyzeAddCardFailedOut->analyze(
-                        $user,
+                foreach ($this->analyzePostAddCardFailServices as $analyzePostAddCardFail) {
+                    $analyzePostAddCardFail->analyze(
+                        $customer,
                         $number,
                         $name,
                         $month,
@@ -197,16 +122,60 @@ class AddCard
                         $zip,
                         $e
                     );
-                } catch (Exception $e) {
-                    throw $e;
                 }
+
+                throw $e;
+            }
+        }
+
+        // Gather it again, because pre listeners could changed
+        $customer = $this->gatherCustomer->gather($customer->getUser());
+
+        try {
+            $gid = $this->createGid->create(
+                $customer,
+                $number,
+                $name,
+                $month,
+                $year,
+                $cvc,
+                $zip
+            );
+        } catch (Exception $e) {
+            foreach ($this->analyzePostAddCardFailServices as $analyzePostAddCardFail) {
+                $analyzePostAddCardFail->analyze(
+                    $customer,
+                    $number,
+                    $name,
+                    $month,
+                    $year,
+                    $cvc,
+                    $zip,
+                    $e
+                );
             }
 
             throw $e;
         }
 
-        foreach ($this->analyzeAddCardSuccessedOut as $analyzeAddCardSuccessedOut) {
-            $analyzeAddCardSuccessedOut->analyze(
+        $card = $this->resolveCard->resolve(
+            $customer,
+            $number,
+            $name,
+            $month,
+            $year,
+            $cvc,
+            $zip
+        );
+
+        $card = $this->addGid->add(
+            $card,
+            $customer,
+            $gid
+        );
+
+        foreach ($this->analyzePostAddCardSuccessServices as $analyzePostAddCardSuccess) {
+            $analyzePostAddCardSuccess->analyze(
                 $card
             );
         }

@@ -2,7 +2,7 @@
 
 namespace Yosmy\Payment;
 
-use MongoDB\BSON\UTCDateTime;
+use Yosmy\Mongo;
 
 /**
  * @di\service()
@@ -24,11 +24,13 @@ class CollectCharges
     }
 
     /**
-     * @param array  $ids
-     * @param string $user
-     * @param string $card
-     * @param int    $from
-     * @param int    $to
+     * @param array|null  $ids
+     * @param string|null $user
+     * @param string|null $card
+     * @param int|null    $from
+     * @param int|null    $to
+     * @param int|null    $skip
+     * @param int|null    $limit
      *
      * @return Charges
      */
@@ -37,8 +39,10 @@ class CollectCharges
         ?string $user,
         ?string $card,
         ?int $from,
-        ?int $to
-    ) {
+        ?int $to,
+        ?int $skip,
+        ?int $limit
+    ): Charges {
         $criteria = [];
 
         if ($ids != null) {
@@ -54,25 +58,42 @@ class CollectCharges
         }
 
         if ($from !== null) {
-            $criteria['date']['$gte'] = new UTCDateTime($from * 1000);
+            $criteria['date']['$gte'] = new Mongo\DateTime($from * 1000);
         }
 
         if ($to !== null) {
-            $criteria['date']['$lt'] = new UTCDatetime($to * 1000);
+            $criteria['date']['$lt'] = new Mongo\DateTime($to * 1000);
         }
 
-        return $this->query($criteria);
+        $options = [];
+
+        if ($skip !== null) {
+            $options['skip'] = $skip;
+        }
+
+        if ($limit !== null) {
+            $options['limit'] = $limit;
+        }
+
+        $options['sort'] = [
+            'date' => -1,
+            '_id' => -1
+        ];
+
+        return $this->query($criteria, $options);
     }
 
     /**
      * @param array $criteria
+     * @param array $options
      *
      * @return Charges
      */
     private function query(
-        array $criteria
-    ) {
-        $cursor = $this->manageCollection->find($criteria);
+        array $criteria,
+        array $options
+    ): Charges {
+        $cursor = $this->manageCollection->find($criteria, $options);
 
         return new Charges($cursor);
     }

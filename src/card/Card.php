@@ -3,9 +3,9 @@
 namespace Yosmy\Payment;
 
 use MongoDB\Model\BSONDocument;
-use Yosmy\Payment\Gateway;
+use Yosmy;
 
-class Card extends BSONDocument
+class Card extends BSONDocument implements Yosmy\Related
 {
     /**
      * @param string       $id
@@ -24,7 +24,7 @@ class Card extends BSONDocument
         array $raw
     ) {
         parent::__construct([
-            'id' => $id,
+            '_id' => $id,
             'user' => $user,
             'last4' => $last4,
             'fingerprint' => $fingerprint,
@@ -38,7 +38,7 @@ class Card extends BSONDocument
      */
     public function getId(): string
     {
-        return $this->offsetGet('id');
+        return $this->offsetGet('_id');
     }
 
     /**
@@ -110,9 +110,6 @@ class Card extends BSONDocument
      */
     public function bsonUnserialize(array $data)
     {
-        $data['id'] = $data['_id'];
-        unset($data['_id']);
-
         $gids = [];
         foreach ($data['gids'] as $gid) {
             $gids[] = new Gateway\Gid(
@@ -128,17 +125,18 @@ class Card extends BSONDocument
     }
 
     /**
-     * @return array
+     * {@inheritDoc}
      */
-    public function jsonSerialize()
+    public function jsonSerialize(): object
     {
-        return [
-            '_id' => $this->id,
-            'user' => $this->user,
-            'last4' => $this->last4,
-            'fingerprint' => $this->fingerprint,
-            'gids' => $this->gids->jsonSerialize(),
-            'raw' => $this->raw,
-        ];
+        $data = parent::jsonSerialize();
+
+        $data->id = $data->_id;
+
+        unset($data->_id);
+
+        $data->gids = $this->getGids()->jsonSerialize();
+
+        return $data;
     }
 }

@@ -3,25 +3,25 @@
     "description": "",
     "require": {
         "php": ">=7.2",
-        "ext-mongodb": "*",
         "ext-json": "*",
         "yosmy/mongo": "@dev",
-        "yosmy/config": "@dev",
-        "yosmy/error": "@dev",
-        "yosmy/event": "@dev",
+        "yosmy/relation": "@dev",
         "yosmy/payment-gateway": "@dev"
     },
     "require-dev": {
         "symfony/debug": "~4",
-        "phpunit/phpunit": "^8"
+        "phpunit/phpunit": "^9"
     },
     "autoload": {
         "psr-4": {
             "Yosmy\\Payment\\": [
                 "src/card",
+                "src/card-audit",
                 "src/charge",
-                "src/exception",
-                "src/user"
+                "src/charge-audit",
+                "src/customer",
+                "src/customer-audit",
+                "src/exception"
             ]
         },
         "classmap": [
@@ -31,7 +31,7 @@
     "autoload-dev": {
         "psr-4": {
             "Yosmy\\Payment\\Test\\": [
-                "tests/user"
+                "tests/customer"
             ]
         }
     },

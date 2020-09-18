@@ -11,14 +11,9 @@ use Yosmy;
 class DeleteCard
 {
     /**
-     * @var GatherUser
+     * @var GatherCustomer
      */
-    private $gatherUser;
-
-    /**
-     * @var GatherCard
-     */
-    private $gatherCard;
+    private $gatherCustomer;
 
     /**
      * @var ManageCardCollection
@@ -31,49 +26,40 @@ class DeleteCard
     private $selectGateway;
 
     /**
-     * @var AnalyzeDeleteCardSuccessedOut[]
+     * @var AnalyzePostDeleteCardSuccess[]
      */
-    private $analyzeDeleteCardSuccessedOut;
+    private $analyzePostDeleteCardSuccessServices;
 
     /**
      * @di\arguments({
-     *     analyzeDeleteCardSuccessedOut: '#yosmy.payment.delete_card.successed_out'
+     *     analyzePostDeleteCardSuccessServices: '#yosmy.payment.post_delete_card_success'
      * })
      *
-     * @param GatherUser                        $gatherUser
-     * @param GatherCard                        $gatherCard
+     * @param GatherCustomer                    $gatherCustomer
      * @param ManageCardCollection              $manageCollection
      * @param Gateway\Card\Delete\SelectGateway $selectGateway
-     * @param AnalyzeDeleteCardSuccessedOut[]   $analyzeDeleteCardSuccessedOut
+     * @param AnalyzePostDeleteCardSuccess[]    $analyzePostDeleteCardSuccessServices
      */
     public function __construct(
-        GatherUser $gatherUser,
-        GatherCard $gatherCard,
+        GatherCustomer $gatherCustomer,
         ManageCardCollection $manageCollection,
         Gateway\Card\Delete\SelectGateway $selectGateway,
-        ?array $analyzeDeleteCardSuccessedOut
+        ?array $analyzePostDeleteCardSuccessServices
     ) {
-        $this->gatherUser = $gatherUser;
-        $this->gatherCard = $gatherCard;
+        $this->gatherCustomer = $gatherCustomer;
         $this->manageCollection = $manageCollection;
         $this->selectGateway = $selectGateway;
-        $this->analyzeDeleteCardSuccessedOut = $analyzeDeleteCardSuccessedOut;
+        $this->analyzePostDeleteCardSuccessServices = $analyzePostDeleteCardSuccessServices;
     }
 
     /**
-     * @param string $card
-     * @param string $user
+     * @param Card $card
      */
     public function delete(
-        string $card,
-        string $user
+        Card $card
     ) {
-        $user = $this->gatherUser->gather($user);
-
-        $card = $this->gatherCard->gather(
-            $card,
-            $user->getId(),
-            null
+        $customer = $this->gatherCustomer->gather(
+            $card->getUser()
         );
 
         // Raw field empty, means card deleted
@@ -94,7 +80,7 @@ class DeleteCard
 
             try {
                 $this->selectGateway->select($gateway)->delete(
-                    $user->getGids()->get($gateway),
+                    $customer->getGids()->get($gateway),
                     $card->getGids()->get($gateway)
                 );
             } catch (Gateway\UnknownException $e) {
@@ -113,8 +99,8 @@ class DeleteCard
             );
         }
 
-        foreach ($this->analyzeDeleteCardSuccessedOut as $analyzeDeleteCardSuccessedOut) {
-            $analyzeDeleteCardSuccessedOut->analyze(
+        foreach ($this->analyzePostDeleteCardSuccessServices as $analyzePostDeleteCardSuccess) {
+            $analyzePostDeleteCardSuccess->analyze(
                 $card
             );
         }

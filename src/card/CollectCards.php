@@ -22,10 +22,12 @@ class CollectCards
     }
 
     /**
-     * @param array  $ids
-     * @param string $user
-     * @param string $fingerprint
-     * @param bool   $deleted
+     * @param array|null  $ids
+     * @param string|null $user
+     * @param string|null $fingerprint
+     * @param bool|null   $deleted
+     * @param int|null    $skip
+     * @param int|null     $limit
      *
      * @return Cards
      */
@@ -33,8 +35,10 @@ class CollectCards
         ?array $ids,
         ?string $user,
         ?string $fingerprint,
-        ?bool $deleted
-    ) {
+        ?bool $deleted,
+        ?int $skip,
+        ?int $limit
+    ): Cards {
         $criteria = [];
 
         if ($ids != null) {
@@ -53,7 +57,17 @@ class CollectCards
             $criteria['raw'] = ['$ne' => []];
         }
 
-        $cursor = $this->manageCollection->find($criteria);
+        $options = [];
+
+        if ($skip !== null) {
+            $options['skip'] = $skip;
+        }
+
+        if ($limit !== null) {
+            $options['limit'] = $limit;
+        }
+
+        $cursor = $this->manageCollection->find($criteria, $options);
 
         return new Cards($cursor);
     }

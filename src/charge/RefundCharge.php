@@ -11,93 +11,52 @@ use LogicException;
 class RefundCharge
 {
     /**
-     * @var ManageChargeCollection
-     */
-    private $manageCollection;
-
-    /**
      * @var Gateway\Charge\Refund\SelectGateway
      */
     private $selectGateway;
 
     /**
-     * @var GatherCard
+     * @var AnalyzePostRefundChargeSuccess[]
      */
-    private $gatherCard;
+    private $analyzePostRefundChargeSuccessServices;
 
     /**
-     * @var GatherUser
-     */
-    private $gatherUser;
-
-    /**
-     * @var Yosmy\LogEvent
-     */
-    private $logEvent;
-
-    /**
-     * @param ManageChargeCollection              $manageCollection
+     * @di\arguments({
+     *     analyzePostRefundChargeSuccessServices: '#yosmy.payment.post_refund_charge_success',
+     * })
+     *
      * @param Gateway\Charge\Refund\SelectGateway $selectGateway
-     * @param GatherCard                          $gatherCard
-     * @param GatherUser                          $gatherUser
-     * @param Yosmy\LogEvent                      $logEvent
+     * @param AnalyzePostRefundChargeSuccess[]    $analyzePostRefundChargeSuccessServices
      */
     public function __construct(
-        ManageChargeCollection $manageCollection,
         Gateway\Charge\Refund\SelectGateway $selectGateway,
-        GatherCard $gatherCard,
-        GatherUser $gatherUser,
-        Yosmy\LogEvent $logEvent
+        array $analyzePostRefundChargeSuccessServices
     ) {
-        $this->manageCollection = $manageCollection;
         $this->selectGateway = $selectGateway;
-        $this->gatherCard = $gatherCard;
-        $this->gatherUser = $gatherUser;
-        $this->logEvent = $logEvent;
+        $this->analyzePostRefundChargeSuccessServices = $analyzePostRefundChargeSuccessServices;
     }
 
     /**
-     * @param string $id
-     * @param int    $amount
+     * @param Charge   $charge
+     * @param int|null $amount
      */
     public function refund(
-        string $id,
+        Charge $charge,
         ?int $amount
     ) {
-        /** @var Charge $charge */
-        $charge = $this->manageCollection->findOne([
-            '_id' => $id
-        ]);
-
         try {
             $this->selectGateway->select($charge->getGid()->getGateway())->refund(
                 $charge->getGid()->getId(),
-                $amount
+                $amount ?: $charge->getAmount()
             );
         } catch (Gateway\UnknownException $e) {
             throw new LogicException(null, null, $e);
         }
 
-        $card = $this->gatherCard->gather(
-            $charge->getCard(),
-            $charge->getUser(),
-            null
-        );
-
-        $user = $this->gatherUser->gather(
-            $charge->getUser()
-        );
-
-        $this->logEvent->log(
-            'yosmy.payment.refund_charge',
-            [
-                'user' => $user,
-                'fingerprint' => $card->getFingerprint(),
-                'charge' => $charge->getId()
-            ],
-            [
-                'amount' => $amount
-            ]
-        );
+        foreach ($this->analyzePostRefundChargeSuccessServices as $analyzePostRefundChargeSuccess) {
+            $analyzePostRefundChargeSuccess->analyze(
+                $charge
+            );
+        }
     }
 }

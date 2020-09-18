@@ -2,12 +2,14 @@
 
 namespace Yosmy\Payment\Charge;
 
-use MongoDB\BSON\UTCDateTime;
+use Yosmy\Mongo;
 use Yosmy;
 use Yosmy\Payment;
 
 /**
- * @di\service()
+ * @di\service({
+ *     private: true
+ * })
  */
 class ComputeAmount
 {
@@ -38,7 +40,7 @@ class ComputeAmount
         ?array $cards,
         ?int $from,
         ?int $to
-    ) {
+    ): int {
         $match = [];
 
         if ($users !== null) {
@@ -50,11 +52,11 @@ class ComputeAmount
         }
 
         if ($from !== null) {
-            $match['date']['$gte'] = new UTCDateTime($from * 1000);
+            $match['date']['$gte'] = new Mongo\DateTime($from * 1000);
         }
 
         if ($to !== null) {
-            $match['date']['$lt'] = new UTCDatetime($to * 1000);
+            $match['date']['$lt'] = new Mongo\Datetime($to * 1000);
         }
 
         $data = iterator_to_array($this->manageCollection->aggregate(

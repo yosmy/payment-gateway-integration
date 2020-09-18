@@ -22,9 +22,9 @@ class GatherCard
     }
 
     /**
-     * @param string $id
-     * @param string $user
-     * @param string $fingerprint
+     * @param string|null $id
+     * @param string|null $user
+     * @param string|null $fingerprint
      *
      * @return Card
      */
@@ -32,7 +32,7 @@ class GatherCard
         ?string $id,
         ?string $user,
         ?string $fingerprint
-    ) {
+    ): Card {
         $criteria = [
             '_id' => $id
         ];

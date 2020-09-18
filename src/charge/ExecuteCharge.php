@@ -2,7 +2,7 @@
 
 namespace Yosmy\Payment;
 
-use MongoDB\BSON\UTCDateTime;
+use Yosmy\Mongo;
 use Yosmy\Payment\Gateway;
 
 /**
@@ -11,9 +11,14 @@ use Yosmy\Payment\Gateway;
 class ExecuteCharge
 {
     /**
-     * @var GatherUser
+     * @var GatherCard
      */
-    private $gatherUser;
+    private $gatherCard;
+
+    /**
+     * @var GatherCustomer
+     */
+    private $gatherCustomer;
 
     /**
      * @var Gateway\Charge\Execute\SelectGateway
@@ -21,53 +26,65 @@ class ExecuteCharge
     private $selectGateway;
 
     /**
+     * @var ProcessGatewayException[]
+     */
+    private $processGatewayExceptionServices;
+    
+    /**
      * @var ManageChargeCollection
      */
     private $manageCollection;
 
     /**
-     * @var AnalyzeExecuteChargeIn[]
+     * @var AnalyzePreExecuteCharge[]
      */
-    private $analyzeExecuteChargeInServices;
+    private $analyzePreExecuteChargeServices;
 
     /**
-     * @var AnalyzeExecuteChargeSuccessedOut[]
+     * @var AnalyzePostExecuteChargeSuccess[]
      */
-    private $analyzeExecuteChargeSuccessedOutService;
+    private $analyzePostExecuteChargeSuccessServices;
 
     /**
-     * @var AnalyzeExecuteChargeFailedOut[]
+     * @var AnalyzePostExecuteChargeFail[]
      */
-    private $analyzeExecuteChargeFailedOutServices;
+    private $analyzePostExecuteChargeFailServices;
 
     /**
      * @di\arguments({
-     *     analyzeExecuteChargeInServices:           '#yosmy.payment.execute_charge.in',
-     *     analyzeExecuteChargeSuccessedOutServices: '#yosmy.payment.execute_charge.successed_out',
-     *     analyzeExecuteChargeFailedOutServices:    '#yosmy.payment.execute_charge.failed_out'
+     *     processGatewayExceptionServices:         '#yosmy.payment.gateway_exception_throwed',
+     *     analyzePreExecuteChargeServices:         '#yosmy.payment.pre_execute_charge',
+     *     analyzePostExecuteChargeSuccessServices: '#yosmy.payment.post_execute_charge_success',
+     *     analyzePostExecuteChargeFailServices:    '#yosmy.payment.post_execute_charge_fail'
      * })
      *
-     * @param GatherUser                           $gatherUser
+     * @param GatherCard                           $gatherCard
+     * @param GatherCustomer                       $gatherCustomer
      * @param Gateway\Charge\Execute\SelectGateway $selectGateway
+     * @param ProcessGatewayException[]            $processGatewayExceptionServices
      * @param ManageChargeCollection               $manageCollection
-     * @param AnalyzeExecuteChargeIn[]             $analyzeExecuteChargeInServices
-     * @param AnalyzeExecuteChargeSuccessedOut[]   $analyzeExecuteChargeSuccessedOutServices
-     * @param AnalyzeExecuteChargeFailedOut[]      $analyzeExecuteChargeFailedOutServices
+     * @param AnalyzePreExecuteCharge[]            $analyzePreExecuteChargeServices
+     * @param AnalyzePostExecuteChargeSuccess[]    $analyzePostExecuteChargeSuccessServices
+     * @param AnalyzePostExecuteChargeFail[]       $analyzePostExecuteChargeFailServices
      */
     public function __construct(
-        GatherUser $gatherUser,
+        GatherCard $gatherCard,
+        GatherCustomer $gatherCustomer,
         Gateway\Charge\Execute\SelectGateway $selectGateway,
+        array $processGatewayExceptionServices,
         ManageChargeCollection $manageCollection,
-        ?array $analyzeExecuteChargeInServices,
-        ?array $analyzeExecuteChargeSuccessedOutServices,
-        ?array $analyzeExecuteChargeFailedOutServices
+        ?array $analyzePreExecuteChargeServices,
+        ?array $analyzePostExecuteChargeSuccessServices,
+        ?array $analyzePostExecuteChargeFailServices
     ) {
-        $this->gatherUser = $gatherUser;
+        $this->gatherCard = $gatherCard;
+        $this->gatherCustomer = $gatherCustomer;
         $this->selectGateway = $selectGateway;
+        $this->processGatewayExceptionServices = $processGatewayExceptionServices;
         $this->manageCollection = $manageCollection;
-        $this->analyzeExecuteChargeInServices = $analyzeExecuteChargeInServices;
-        $this->analyzeExecuteChargeSuccessedOutService = $analyzeExecuteChargeSuccessedOutServices;
-        $this->analyzeExecuteChargeFailedOutServices = $analyzeExecuteChargeFailedOutServices;
+        $this->analyzePreExecuteChargeServices = $analyzePreExecuteChargeServices;
+        $this->analyzePostExecuteChargeSuccessServices = $analyzePostExecuteChargeSuccessServices;
+        $this->analyzePostExecuteChargeFailServices = $analyzePostExecuteChargeFailServices;
     }
 
     /**
@@ -85,29 +102,44 @@ class ExecuteCharge
         int $amount,
         string $description,
         string $statement
-    ) {
-        foreach ($this->analyzeExecuteChargeInServices as $analyzeExecuteChargeIn) {
+    ): Charge {
+        foreach ($this->analyzePreExecuteChargeServices as $analyzePreExecuteCharge) {
             try {
-                $analyzeExecuteChargeIn->analyze(
+                $analyzePreExecuteCharge->analyze(
                     $card,
                     $amount,
                     $description,
                     $statement
                 );
             } catch (Exception $e) {
+                foreach ($this->analyzePostExecuteChargeFailServices as $analyzePostExecuteChargeFail) {
+                    $analyzePostExecuteChargeFail->analyze(
+                        $card,
+                        $amount,
+                        $e
+                    );
+                }
+
                 throw $e;
             }
         }
 
-        $user = $this->gatherUser->gather(
+        // Gather it again, because pre listeners could changed
+        $card = $this->gatherCard->gather(
+            $card->getId(),
+            null,
+            null
+        );
+
+        $customer = $this->gatherCustomer->gather(
             $card->getUser()
         );
 
-        $gateway = $user->getGateway();
+        $gateway = $customer->getGateway();
 
         try {
             $charge = $this->selectGateway->select($gateway)->execute(
-                $user->getGids()->get($gateway),
+                $customer->getGids()->get($gateway),
                 $card->getGids()->get($gateway),
                 $amount,
                 $description,
@@ -121,26 +153,27 @@ class ExecuteCharge
             |Gateway\FraudException
             |Gateway\UnknownException $e
         ) {
-            $exception = null;
+            $exception = new UnknownException();
 
-            foreach ($this->analyzeExecuteChargeFailedOutServices as $analyzeExecuteChargeFailedOut) {
+            foreach ($this->processGatewayExceptionServices as $processException) {
                 try {
-                    $analyzeExecuteChargeFailedOut->analyze(
-                        $card,
-                        $amount,
-                        $e
+                    $processException->process(
+                        $e,
+                        $customer
                     );
                 } catch (Exception $e) {
                     $exception = $e;
-
-                    break;
                 }
             }
 
-            if (!$exception) {
-                $exception = new UnknownException();
+            foreach ($this->analyzePostExecuteChargeFailServices as $analyzePostExecuteChargeFail) {
+                $analyzePostExecuteChargeFail->analyze(
+                    $card,
+                    $amount,
+                    $exception
+                );
             }
-
+            
             throw $exception;
         }
 
@@ -148,19 +181,19 @@ class ExecuteCharge
 
         $this->manageCollection->insertOne([
             '_id' => $id,
-            'user' => $user->getId(),
+            'user' => $customer->getUser(),
             'card' => $card->getId(),
             'amount' => $amount,
             'gid' => [
                 'id' => $charge->getId(),
                 'gateway' => $gateway
             ],
-            'date' => new UTCDateTime($charge->getDate() * 1000)
+            'date' => new Mongo\DateTime($charge->getDate() * 1000)
         ]);
 
         $charge = new Charge(
             $id,
-            $user->getId(),
+            $customer->getUser(),
             $card->getId(),
             $amount,
             new Gateway\Gid(
@@ -170,10 +203,8 @@ class ExecuteCharge
             $charge->getDate()
         );
 
-        foreach ($this->analyzeExecuteChargeSuccessedOutService as $analyzeExecuteChargeSuccessedOut) {
-            $analyzeExecuteChargeSuccessedOut->analyze(
-                $card,
-                $amount,
+        foreach ($this->analyzePostExecuteChargeSuccessServices as $analyzePreExecuteChargeSuccess) {
+            $analyzePreExecuteChargeSuccess->analyze(
                 $charge
             );
         }

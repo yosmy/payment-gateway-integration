@@ -5,7 +5,7 @@ namespace Yosmy\Payment;
 use Exception as BaseException;
 use JsonSerializable;
 
-abstract class Exception extends BaseException implements JsonSerializable
+class Exception extends BaseException implements JsonSerializable
 {
     public function __construct(
         string $message
@@ -14,9 +14,9 @@ abstract class Exception extends BaseException implements JsonSerializable
     }
 
     /**
-     * @return array
+     * {@inheritDoc}
      */
-    public function jsonSerialize()
+    public function jsonSerialize(): array
     {
         return [
             'message' => $this->message

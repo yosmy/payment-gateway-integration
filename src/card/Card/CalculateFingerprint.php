@@ -3,7 +3,9 @@
 namespace Yosmy\Payment\Card;
 
 /**
- * @di\service()
+ * @di\service({
+ *     private: true
+ * })
  */
 class CalculateFingerprint
 {
@@ -14,7 +16,7 @@ class CalculateFingerprint
      */
     public function calculate(
         string $number
-    ) {
+    ): string {
         return md5($number);
     }
 }

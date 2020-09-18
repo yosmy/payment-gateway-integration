@@ -2,8 +2,7 @@
 
 namespace Yosmy\Payment;
 
-use MongoDB\BSON\UTCDateTime;
-use Yosmy\Mongo\PrepareAggregation;
+use Yosmy\Mongo;
 
 /**
  * @di\service()
@@ -20,44 +19,50 @@ class ComputeCharges
     private $manageCollection;
 
     /**
-     * @var PrepareAggregation
+     * @var Mongo\PrepareAggregation
      */
     private $prepareAggregation;
 
     /**
-     * @param ManageChargeCollection $manageCollection
-     * @param PrepareAggregation    $prepareAggregation
+     * @param ManageChargeCollection   $manageCollection
+     * @param Mongo\PrepareAggregation $prepareAggregation
      */
     public function __construct(
         ManageChargeCollection $manageCollection,
-        PrepareAggregation $prepareAggregation
+        Mongo\PrepareAggregation $prepareAggregation
     ) {
         $this->manageCollection = $manageCollection;
         $this->prepareAggregation = $prepareAggregation;
     }
 
     /**
-     * @param int    $from
-     * @param int    $to
-     * @param string $timezone
-     * @param string $group
+     * @param string|null $user
+     * @param int|null    $from
+     * @param int|null    $to
+     * @param string|null $timezone
+     * @param string|null $group
      *
      * @return array
      */
     public function compute(
+        ?string $user,
         ?int $from,
         ?int $to,
         string $timezone,
         ?string $group
-    ) {
+    ): array {
         $criteria = [];
 
+        if ($user !== null) {
+            $criteria['user'] = $user;
+        }
+
         if ($from !== null) {
-            $criteria['date']['$gte'] = new UTCDateTime($from * 1000);
+            $criteria['date']['$gte'] = new Mongo\DateTime($from * 1000);
         }
 
         if ($to !== null) {
-            $criteria['date']['$lt'] = new UTCDatetime($to * 1000);
+            $criteria['date']['$lt'] = new Mongo\DateTime($to * 1000);
         }
 
         switch ($group) {
